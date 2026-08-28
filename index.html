@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>판매 기록 관리</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f9f9f7;
+    --surface-1: #fcfcfb;
+    --surface-2: #f1f0ec;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --border: rgba(11,11,11,0.10);
+    --grid: #e1e0d9;
+    --accent: #2a78d6;
+    --accent-ink: #ffffff;
+    --danger: #d03b3b;
+    --danger-ghost: rgba(208,59,59,0.08);
+    --good: #0ca30c;
+    --good-ghost: rgba(12,163,12,0.08);
+    --seq-100: #cde2fb;
+    --seq-700: #0d366b;
+    --cat-1: #2a78d6;
+    --cat-2: #eb6834;
+    --cat-3: #1baf7a;
+    --cat-4: #eda100;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-0: #0d0d0d;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --border: rgba(255,255,255,0.10);
+      --grid: #2c2c2a;
+      --accent: #3987e5;
+      --accent-ink: #0b0b0b;
+      --danger: #e66767;
+      --danger-ghost: rgba(230,103,103,0.12);
+      --good: #0ca30c;
+      --good-ghost: rgba(12,163,12,0.16);
+      --seq-100: #184f95;
+      --seq-700: #cde2fb;
+      --cat-1: #3987e5;
+      --cat-2: #d95926;
+      --cat-3: #199e70;
+      --cat-4: #c98500;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-0: #0d0d0d;
+    --surface-1: #1a1a19;
+    --surface-2: #232322;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --border: rgba(255,255,255,0.10);
+    --grid: #2c2c2a;
+    --accent: #3987e5;
+    --accent-ink: #0b0b0b;
+    --danger: #e66767;
+    --danger-ghost: rgba(230,103,103,0.12);
+    --good: #0ca30c;
+    --good-ghost: rgba(12,163,12,0.16);
+    --seq-100: #184f95;
+    --seq-700: #cde2fb;
+    --cat-1: #3987e5;
+    --cat-2: #d95926;
+    --cat-3: #199e70;
+    --cat-4: #c98500;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, p { margin: 0; }
+  table { border-collapse: collapse; width: 100%; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  button, input, select { font-family: inherit; font-size: 14px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app { max-width: 1080px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  header.app-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 20px; flex-wrap: wrap; gap: 10px;
+  }
+  header.app-header h1 { font-size: 20px; font-weight: 700; }
+  header.app-header .sub { font-size: 13px; color: var(--text-muted); }
+
+  nav.tabs {
+    display: flex; gap: 4px; margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  nav.tabs button {
+    background: none; border: none; cursor: pointer;
+    padding: 10px 16px; font-size: 14px; font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  nav.tabs button.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 14px;
+    margin-bottom: 24px;
+  }
+  .stat-tile { display: flex; flex-direction: column; gap: 6px; }
+  .stat-tile .label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+  .stat-tile .value { font-size: 24px; font-weight: 700; }
+  .stat-tile .value.small { font-size: 20px; }
+
+  section.dash-section { margin-bottom: 24px; }
+  section.dash-section h2 {
+    font-size: 14px; font-weight: 700; color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+
+  table.data-table th, table.data-table td {
+    text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--grid);
+    font-size: 13.5px; white-space: nowrap;
+  }
+  table.data-table th { color: var(--text-muted); font-weight: 600; font-size: 12px; }
+  table.data-table tbody tr:hover { background: var(--surface-2); }
+  .table-scroll { overflow-x: auto; }
+
+  .bar-cell { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+  .bar-track { flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+
+  .legend-row { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  .channel-bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .channel-bar-row .ch-name { width: 70px; font-size: 13px; color: var(--text-secondary); flex-shrink: 0; }
+  .channel-bar-row .ch-track { flex: 1; height: 16px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .channel-bar-row .ch-fill { height: 100%; border-radius: 4px; }
+  .channel-bar-row .ch-pct { width: 90px; text-align: right; font-size: 13px; flex-shrink: 0; }
+
+  .empty-state { padding: 30px; text-align: center; color: var(--text-muted); font-size: 14px; }
+
+  .delta-up { color: var(--good); font-weight: 700; }
+  .delta-down { color: var(--danger); font-weight: 700; }
+  .delta-flat { color: var(--text-muted); font-weight: 700; }
+
+  .period-readout { font-size: 12px; color: var(--text-muted); padding: 7px 0 2px; }
+
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0,0,0,0); white-space: nowrap; border: 0; padding: 0; margin: -1px;
+  }
+
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+    margin-bottom: 16px; padding: 14px; background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 12px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+  .field input, .field select {
+    background: var(--surface-0); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 9px; min-width: 0;
+  }
+  .toolbar .spacer { flex: 1; }
+
+  .btn {
+    border: 1px solid var(--border); background: var(--surface-0); color: var(--text-primary);
+    border-radius: 8px; padding: 8px 14px; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  }
+  .btn:hover { background: var(--surface-2); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .btn.primary:hover { filter: brightness(1.05); }
+  .btn.danger-text { color: var(--danger); border-color: transparent; background: none; padding: 4px 8px; }
+  .btn.danger-text:hover { background: var(--danger-ghost); }
+  .btn.ghost-text { border-color: transparent; background: none; padding: 4px 8px; }
+  .btn.ghost-text:hover { background: var(--surface-2); }
+  .btn.small { padding: 5px 9px; font-size: 12.5px; }
+
+  .actions-row { display: flex; gap: 10px; margin-bottom: 14px; justify-content: flex-end; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(11,11,11,0.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 20; padding: 16px;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    background: var(--surface-1); border-radius: 14px; border: 1px solid var(--border);
+    padding: 22px 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+  .form-grid .field.full { grid-column: 1 / -1; }
+  .form-grid input, .form-grid select {
+    background: var(--surface-0); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%;
+  }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .error-text { color: var(--danger); font-size: 12.5px; margin-bottom: 10px; min-height: 16px; }
+
+  @media (max-width: 720px) {
+    .stat-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .form-grid { grid-template-columns: 1fr; }
+    .toolbar { flex-direction: column; align-items: stretch; }
+    .toolbar .field { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="app-header">
+    <div>
+      <h1>판매 기록 관리</h1>
+      <div class="sub">브랜드 판매 기록 · 모코드별 집계</div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="dashboard">대시보드</button>
+    <button class="tab-btn" data-tab="records">판매 기록</button>
+    <button class="tab-btn" data-tab="compare">기간 비교</button>
+  </nav>
+
+  <!-- Dashboard -->
+  <section class="panel active" id="panel-dashboard">
+    <div class="stat-grid">
+      <div class="card stat-tile">
+        <div class="label">총매출</div>
+        <div class="value tabular" id="statTotalRevenue">0원</div>
+      </div>
+      <div class="card stat-tile">
+        <div class="label">총판매수량</div>
+        <div class="value tabular" id="statTotalQty">0개</div>
+      </div>
+      <div class="card stat-tile">
+        <div class="label">등록된 기록</div>
+        <div class="value tabular" id="statCount">0건</div>
+      </div>
+      <div class="card stat-tile">
+        <div class="label">이번 달 매출</div>
+        <div class="value tabular small" id="statMonthRevenue">0원</div>
+      </div>
+      <div class="card stat-tile">
+        <div class="label">총순이익</div>
+        <div class="value tabular small" id="statTotalProfit">0원</div>
+      </div>
+    </div>
+
+    <section class="dash-section">
+      <h2>모코드별 판매량 · 매출</h2>
+      <div class="card table-scroll">
+        <table class="data-table" id="modelCodeTable">
+          <thead>
+            <tr>
+              <th>모코드</th><th>품번 수</th><th>판매수량</th><th>매출</th><th>순이익</th><th>비중</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty-state" id="modelCodeEmpty" style="display:none;">아직 판매 기록이 없습니다.</div>
+      </div>
+    </section>
+
+    <section class="dash-section">
+      <h2>월별 매출</h2>
+      <div class="card table-scroll">
+        <table class="data-table" id="monthlyTable">
+          <thead><tr><th>연-월</th><th>매출</th><th>판매수량</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty-state" id="monthlyEmpty" style="display:none;">아직 판매 기록이 없습니다.</div>
+      </div>
+    </section>
+
+    <section class="dash-section">
+      <h2>채널별 매출 비중</h2>
+      <div class="card">
+        <div id="channelBars"></div>
+        <div class="empty-state" id="channelEmpty" style="display:none;">아직 판매 기록이 없습니다.</div>
+      </div>
+    </section>
+  </section>
+
+  <!-- Records -->
+  <section class="panel" id="panel-records">
+    <div class="toolbar">
+      <div class="field">
+        <label for="fSearch">검색 (제품명/품번/모코드)</label>
+        <input type="text" id="fSearch" placeholder="검색어 입력">
+      </div>
+      <div class="field">
+        <label for="fSeason">시즌</label>
+        <select id="fSeason">
+          <option value="">전체</option>
+          <option value="SS">SS</option>
+          <option value="FW">FW</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fChannel">판매채널</label>
+        <select id="fChannel">
+          <option value="">전체</option>
+          <option value="자사몰">자사몰</option>
+          <option value="오프라인">오프라인</option>
+          <option value="위탁">위탁</option>
+          <option value="기타">기타</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fFrom">시작일</label>
+        <input type="date" id="fFrom">
+      </div>
+      <div class="field">
+        <label for="fTo">종료일</label>
+        <input type="date" id="fTo">
+      </div>
+      <button class="btn" id="btnResetFilter">필터 초기화</button>
+      <div class="spacer"></div>
+    </div>
+
+    <div class="actions-row">
+      <button class="btn" id="btnImportCsv">CSV/엑셀 가져오기</button>
+      <input type="file" id="fileImportCsv" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="visually-hidden">
+      <button class="btn" id="btnExportCsv">CSV 내보내기</button>
+      <button class="btn primary" id="btnNewRecord">+ 새 기록</button>
+    </div>
+
+    <div class="card table-scroll">
+      <table class="data-table" id="recordsTable">
+        <thead>
+          <tr>
+            <th>연도</th><th>시즌</th><th>품번</th><th>모코드</th><th>제품명</th>
+            <th>수량</th><th>단가</th><th>원가</th><th>매출</th><th>순이익</th><th>판매일</th><th>채널</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty-state" id="recordsEmpty" style="display:none;">조건에 맞는 판매 기록이 없습니다.</div>
+    </div>
+  </section>
+
+  <!-- Compare -->
+  <section class="panel" id="panel-compare">
+    <div class="toolbar">
+      <div class="field">
+        <label for="cmpFrom">기준 기간 시작일</label>
+        <input type="date" id="cmpFrom">
+      </div>
+      <div class="field">
+        <label for="cmpTo">기준 기간 종료일</label>
+        <input type="date" id="cmpTo">
+      </div>
+      <div class="field">
+        <label for="cmpMode">비교 모드</label>
+        <select id="cmpMode">
+          <option value="week">전주 동기간</option>
+          <option value="year">전년 동기간</option>
+          <option value="custom">직접 지정</option>
+        </select>
+      </div>
+      <div class="field" id="cmpCustomFromField" style="display:none;">
+        <label for="cmpCustomFrom">비교 기간 시작일</label>
+        <input type="date" id="cmpCustomFrom">
+      </div>
+      <div class="field" id="cmpCustomToField" style="display:none;">
+        <label for="cmpCustomTo">비교 기간 종료일</label>
+        <input type="date" id="cmpCustomTo">
+      </div>
+      <div class="field">
+        <label for="cmpModelCode">모코드</label>
+        <select id="cmpModelCode">
+          <option value="">전체</option>
+        </select>
+      </div>
+    </div>
+    <div class="period-readout" id="cmpPeriodReadout"></div>
+
+    <div class="card table-scroll">
+      <table class="data-table" id="compareTable">
+        <thead>
+          <tr>
+            <th>모코드</th>
+            <th>기준 기간 매출</th><th>기준 기간 수량</th>
+            <th>비교 기간 매출</th><th>비교 기간 수량</th>
+            <th>매출 증감</th><th>수량 증감</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty-state" id="compareEmpty" style="display:none;">비교할 판매 기록이 없습니다.</div>
+    </div>
+  </section>
+</div>
+
+<div class="modal-overlay hidden" id="modalOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">새 판매 기록</h2>
+    <div class="error-text" id="formError"></div>
+    <form id="recordForm">
+      <div class="form-grid">
+        <div class="field">
+          <label for="inYear">연도</label>
+          <input type="number" id="inYear" required>
+        </div>
+        <div class="field">
+          <label for="inSeason">시즌</label>
+          <select id="inSeason" required>
+            <option value="SS">SS</option>
+            <option value="FW">FW</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="inStyleCode">품번</label>
+          <input type="text" id="inStyleCode" placeholder="예: 24FW-A102-BK" required>
+        </div>
+        <div class="field">
+          <label for="inModelCode">모코드</label>
+          <input type="text" id="inModelCode" placeholder="예: A102" required>
+        </div>
+        <div class="field full">
+          <label for="inProductName">제품명 (선택)</label>
+          <input type="text" id="inProductName" placeholder="예: 클래식 숄더백">
+        </div>
+        <div class="field">
+          <label for="inQuantity">수량</label>
+          <input type="number" id="inQuantity" min="1" required>
+        </div>
+        <div class="field">
+          <label for="inUnitPrice">단가(원)</label>
+          <input type="number" id="inUnitPrice" min="0" required>
+        </div>
+        <div class="field">
+          <label for="inUnitCost">원가(원, 선택)</label>
+          <input type="number" id="inUnitCost" min="0">
+        </div>
+        <div class="field">
+          <label for="inDate">판매일</label>
+          <input type="date" id="inDate" required>
+        </div>
+        <div class="field">
+          <label for="inChannel">판매채널</label>
+          <select id="inChannel" required>
+            <option value="자사몰">자사몰</option>
+            <option value="오프라인">오프라인</option>
+            <option value="위탁">위탁</option>
+            <option value="기타">기타</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="btnCancelForm">취소</button>
+        <button type="submit" class="btn primary">저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  var STORAGE_KEY = 'sales_records_v1';
+  var CHANNEL_COLORS = { '자사몰': 'var(--cat-1)', '오프라인': 'var(--cat-2)', '위탁': 'var(--cat-3)', '기타': 'var(--cat-4)' };
+  var CHANNELS = ['자사몰', '오프라인', '위탁', '기타'];
+
+  var editingId = null;
+
+  function loadRecords() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+  function saveRecords(records) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  }
+  function uid() {
+    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+  function revenueOf(r) { return r.quantity * r.unitPrice; }
+  function profitOf(r) { return (r.unitPrice - (r.unitCost || 0)) * r.quantity; }
+  function aggregateByModelCode(list) {
+    var map = {};
+    list.forEach(function (r) {
+      if (!map[r.modelCode]) map[r.modelCode] = { styleCodes: new Set(), qty: 0, revenue: 0, profit: 0 };
+      map[r.modelCode].styleCodes.add(r.styleCode);
+      map[r.modelCode].qty += r.quantity;
+      map[r.modelCode].revenue += revenueOf(r);
+      map[r.modelCode].profit += profitOf(r);
+    });
+    return map;
+  }
+  function shiftDateStr(dateStr, days) {
+    var d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    return localDateStr(d);
+  }
+  function shiftYearStr(dateStr, years) {
+    var d = new Date(dateStr + 'T00:00:00');
+    d.setFullYear(d.getFullYear() + years);
+    return localDateStr(d);
+  }
+  function inRange(dateStr, from, to) {
+    return dateStr && (!from || dateStr >= from) && (!to || dateStr <= to);
+  }
+  function localDateStr(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function fmtWon(n) { return Math.round(n).toLocaleString('ko-KR') + '원'; }
+  function fmtInt(n) { return Math.round(n).toLocaleString('ko-KR'); }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  var records = loadRecords();
+
+  // ---------- Tabs ----------
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'dashboard') renderDashboard();
+      if (btn.dataset.tab === 'compare') renderCompare();
+    });
+  });
+
+  // ---------- Dashboard ----------
+  function renderDashboard() {
+    var totalRevenue = 0, totalQty = 0, totalProfit = 0;
+    var now = new Date();
+    var curMonthKey = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    var monthRevenue = 0;
+
+    var monthMap = {};
+    var channelMap = {};
+
+    records.forEach(function (r) {
+      var rev = revenueOf(r);
+      totalRevenue += rev;
+      totalQty += r.quantity;
+      totalProfit += profitOf(r);
+
+      var monthKey = r.date ? r.date.slice(0, 7) : '기타';
+      if (monthKey === curMonthKey) monthRevenue += rev;
+
+      if (!monthMap[monthKey]) monthMap[monthKey] = { qty: 0, revenue: 0 };
+      monthMap[monthKey].qty += r.quantity;
+      monthMap[monthKey].revenue += rev;
+
+      var ch = r.channel || '기타';
+      channelMap[ch] = (channelMap[ch] || 0) + rev;
+    });
+
+    document.getElementById('statTotalRevenue').textContent = fmtWon(totalRevenue);
+    document.getElementById('statTotalQty').textContent = fmtInt(totalQty) + '개';
+    document.getElementById('statCount').textContent = fmtInt(records.length) + '건';
+    document.getElementById('statMonthRevenue').textContent = fmtWon(monthRevenue);
+    document.getElementById('statTotalProfit').textContent = fmtWon(totalProfit);
+
+    // model code table
+    var modelMap = aggregateByModelCode(records);
+    var modelRows = Object.keys(modelMap).map(function (code) {
+      return { code: code, styleCount: modelMap[code].styleCodes.size, qty: modelMap[code].qty, revenue: modelMap[code].revenue, profit: modelMap[code].profit };
+    }).sort(function (a, b) { return b.revenue - a.revenue; });
+    var maxModelRevenue = modelRows.reduce(function (m, r) { return Math.max(m, r.revenue); }, 0) || 1;
+
+    var modelTbody = document.querySelector('#modelCodeTable tbody');
+    modelTbody.innerHTML = modelRows.map(function (r) {
+      var pct = totalRevenue > 0 ? (r.revenue / totalRevenue * 100) : 0;
+      var barPct = (r.revenue / maxModelRevenue * 100).toFixed(1);
+      return '<tr>' +
+        '<td>' + escapeHtml(r.code) + '</td>' +
+        '<td class="tabular">' + r.styleCount + '</td>' +
+        '<td class="tabular">' + fmtInt(r.qty) + '</td>' +
+        '<td class="tabular">' + fmtWon(r.revenue) + '</td>' +
+        '<td class="tabular">' + fmtWon(r.profit) + '</td>' +
+        '<td><div class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:' + barPct + '%"></div></div><span class="tabular" style="font-size:12px;color:var(--text-muted);min-width:34px;">' + pct.toFixed(1) + '%</span></div></td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('modelCodeEmpty').style.display = modelRows.length ? 'none' : 'block';
+    document.getElementById('modelCodeTable').style.display = modelRows.length ? '' : 'none';
+
+    // monthly table
+    var monthRows = Object.keys(monthMap).sort().reverse().map(function (k) {
+      return { month: k, qty: monthMap[k].qty, revenue: monthMap[k].revenue };
+    });
+    var monthTbody = document.querySelector('#monthlyTable tbody');
+    monthTbody.innerHTML = monthRows.map(function (r) {
+      return '<tr><td>' + r.month + '</td><td class="tabular">' + fmtWon(r.revenue) + '</td><td class="tabular">' + fmtInt(r.qty) + '개</td></tr>';
+    }).join('');
+    document.getElementById('monthlyEmpty').style.display = monthRows.length ? 'none' : 'block';
+    document.getElementById('monthlyTable').style.display = monthRows.length ? '' : 'none';
+
+    // channel bars
+    var channelTotal = Object.keys(channelMap).reduce(function (s, k) { return s + channelMap[k]; }, 0);
+    var channelEl = document.getElementById('channelBars');
+    if (channelTotal > 0) {
+      var legend = '<div class="legend-row">' + CHANNELS.map(function (ch) {
+        return '<div class="legend-item"><span class="legend-dot" style="background:' + CHANNEL_COLORS[ch] + '"></span>' + ch + '</div>';
+      }).join('') + '</div>';
+      var bars = CHANNELS.filter(function (ch) { return channelMap[ch]; }).map(function (ch) {
+        var v = channelMap[ch] || 0;
+        var pct = channelTotal > 0 ? (v / channelTotal * 100) : 0;
+        return '<div class="channel-bar-row">' +
+          '<div class="ch-name">' + ch + '</div>' +
+          '<div class="ch-track"><div class="ch-fill" style="width:' + pct.toFixed(1) + '%;background:' + CHANNEL_COLORS[ch] + '"></div></div>' +
+          '<div class="ch-pct tabular">' + fmtWon(v) + ' · ' + pct.toFixed(1) + '%</div>' +
+          '</div>';
+      }).join('');
+      channelEl.innerHTML = legend + bars;
+      document.getElementById('channelEmpty').style.display = 'none';
+    } else {
+      channelEl.innerHTML = '';
+      document.getElementById('channelEmpty').style.display = 'block';
+    }
+  }
+
+  // ---------- Records list / filters ----------
+  function getFilters() {
+    return {
+      search: document.getElementById('fSearch').value.trim().toLowerCase(),
+      season: document.getElementById('fSeason').value,
+      channel: document.getElementById('fChannel').value,
+      from: document.getElementById('fFrom').value,
+      to: document.getElementById('fTo').value
+    };
+  }
+  function filteredRecords() {
+    var f = getFilters();
+    return records.filter(function (r) {
+      if (f.search) {
+        var hay = (r.productName + ' ' + r.styleCode + ' ' + r.modelCode).toLowerCase();
+        if (hay.indexOf(f.search) === -1) return false;
+      }
+      if (f.season && r.season !== f.season) return false;
+      if (f.channel && r.channel !== f.channel) return false;
+      if (f.from && r.date < f.from) return false;
+      if (f.to && r.date > f.to) return false;
+      return true;
+    }).sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+  }
+  function renderRecords() {
+    var list = filteredRecords();
+    var tbody = document.querySelector('#recordsTable tbody');
+    tbody.innerHTML = list.map(function (r) {
+      return '<tr>' +
+        '<td class="tabular">' + r.year + '</td>' +
+        '<td>' + r.season + '</td>' +
+        '<td>' + escapeHtml(r.styleCode) + '</td>' +
+        '<td>' + escapeHtml(r.modelCode) + '</td>' +
+        '<td>' + escapeHtml(r.productName || '-') + '</td>' +
+        '<td class="tabular">' + fmtInt(r.quantity) + '</td>' +
+        '<td class="tabular">' + fmtWon(r.unitPrice) + '</td>' +
+        '<td class="tabular">' + fmtWon(r.unitCost || 0) + '</td>' +
+        '<td class="tabular">' + fmtWon(revenueOf(r)) + '</td>' +
+        '<td class="tabular">' + fmtWon(profitOf(r)) + '</td>' +
+        '<td>' + r.date + '</td>' +
+        '<td>' + escapeHtml(r.channel) + '</td>' +
+        '<td>' +
+          '<button class="btn ghost-text small" data-edit="' + r.id + '">수정</button>' +
+          '<button class="btn danger-text small" data-del="' + r.id + '">삭제</button>' +
+        '</td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('recordsEmpty').style.display = list.length ? 'none' : 'block';
+    document.getElementById('recordsTable').style.display = list.length ? '' : 'none';
+
+    tbody.querySelectorAll('[data-edit]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openForm(btn.getAttribute('data-edit')); });
+    });
+    tbody.querySelectorAll('[data-del]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (confirm('이 판매 기록을 삭제할까요?')) {
+          records = records.filter(function (r) { return r.id !== btn.getAttribute('data-del'); });
+          saveRecords(records);
+          renderRecords();
+        }
+      });
+    });
+  }
+
+  ['fSearch', 'fSeason', 'fChannel', 'fFrom', 'fTo'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', renderRecords);
+    document.getElementById(id).addEventListener('change', renderRecords);
+  });
+  document.getElementById('btnResetFilter').addEventListener('click', function () {
+    document.getElementById('fSearch').value = '';
+    document.getElementById('fSeason').value = '';
+    document.getElementById('fChannel').value = '';
+    document.getElementById('fFrom').value = '';
+    document.getElementById('fTo').value = '';
+    renderRecords();
+  });
+
+  // ---------- Form modal ----------
+  var overlay = document.getElementById('modalOverlay');
+  var form = document.getElementById('recordForm');
+
+  function openForm(id) {
+    editingId = id || null;
+    document.getElementById('formError').textContent = '';
+    if (id) {
+      var r = records.find(function (x) { return x.id === id; });
+      document.getElementById('modalTitle').textContent = '판매 기록 수정';
+      document.getElementById('inYear').value = r.year;
+      document.getElementById('inSeason').value = r.season;
+      document.getElementById('inStyleCode').value = r.styleCode;
+      document.getElementById('inModelCode').value = r.modelCode;
+      document.getElementById('inProductName').value = r.productName || '';
+      document.getElementById('inQuantity').value = r.quantity;
+      document.getElementById('inUnitPrice').value = r.unitPrice;
+      document.getElementById('inUnitCost').value = r.unitCost || '';
+      document.getElementById('inDate').value = r.date;
+      document.getElementById('inChannel').value = r.channel;
+    } else {
+      document.getElementById('modalTitle').textContent = '새 판매 기록';
+      form.reset();
+      var today = new Date();
+      document.getElementById('inYear').value = today.getFullYear();
+      document.getElementById('inDate').value = localDateStr(today);
+    }
+    overlay.classList.remove('hidden');
+  }
+  function closeForm() { overlay.classList.add('hidden'); editingId = null; }
+
+  document.getElementById('btnNewRecord').addEventListener('click', function () { openForm(null); });
+  document.getElementById('btnCancelForm').addEventListener('click', closeForm);
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) closeForm(); });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var year = parseInt(document.getElementById('inYear').value, 10);
+    var season = document.getElementById('inSeason').value;
+    var styleCode = document.getElementById('inStyleCode').value.trim();
+    var modelCode = document.getElementById('inModelCode').value.trim();
+    var productName = document.getElementById('inProductName').value.trim();
+    var quantity = parseFloat(document.getElementById('inQuantity').value);
+    var unitPrice = parseFloat(document.getElementById('inUnitPrice').value);
+    var unitCostRaw = document.getElementById('inUnitCost').value;
+    var unitCost = unitCostRaw === '' ? 0 : parseFloat(unitCostRaw);
+    var date = document.getElementById('inDate').value;
+    var channel = document.getElementById('inChannel').value;
+
+    if (!year || !styleCode || !modelCode || !quantity || quantity <= 0 || unitPrice < 0 || !date || unitCost < 0) {
+      document.getElementById('formError').textContent = '필수 항목을 모두 올바르게 입력해주세요.';
+      return;
+    }
+
+    if (editingId) {
+      var idx = records.findIndex(function (r) { return r.id === editingId; });
+      records[idx] = { id: editingId, year: year, season: season, styleCode: styleCode, modelCode: modelCode, productName: productName, quantity: quantity, unitPrice: unitPrice, unitCost: unitCost, date: date, channel: channel };
+    } else {
+      records.push({ id: uid(), year: year, season: season, styleCode: styleCode, modelCode: modelCode, productName: productName, quantity: quantity, unitPrice: unitPrice, unitCost: unitCost, date: date, channel: channel });
+    }
+    saveRecords(records);
+    closeForm();
+    renderRecords();
+  });
+
+  // ---------- CSV export ----------
+  function toCsvValue(v) {
+    var s = String(v == null ? '' : v);
+    if (/[",\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  document.getElementById('btnExportCsv').addEventListener('click', function () {
+    var header = ['연도', '시즌', '품번', '모코드', '제품명', '수량', '단가', '원가', '매출', '순이익', '판매일', '채널'];
+    var rows = records.slice().sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); }).map(function (r) {
+      return [r.year, r.season, r.styleCode, r.modelCode, r.productName || '', r.quantity, r.unitPrice, r.unitCost || 0, revenueOf(r), profitOf(r), r.date, r.channel];
+    });
+    var csv = '﻿' + [header].concat(rows).map(function (row) {
+      return row.map(toCsvValue).join(',');
+    }).join('\r\n');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '판매기록_' + localDateStr(new Date()) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // ---------- CSV import ----------
+  function parseCsvText(text) {
+    text = text.replace(/^﻿/, '').replace(/\r\n/g, '\n');
+    var rows = [];
+    var row = [];
+    var field = '';
+    var inQuotes = false;
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else { inQuotes = false; }
+        } else {
+          field += c;
+        }
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === ',') {
+        row.push(field); field = '';
+      } else if (c === '\n') {
+        row.push(field); field = '';
+        rows.push(row); row = [];
+      } else {
+        field += c;
+      }
+    }
+    if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+    return rows.filter(function (r) { return !(r.length === 1 && r[0] === ''); });
+  }
+
+  var CSV_FIELD_MAP = {
+    '연도': 'year', '시즌': 'season', '품번': 'styleCode', '모코드': 'modelCode',
+    '제품명': 'productName', '수량': 'quantity', '단가': 'unitPrice', '원가': 'unitCost',
+    '판매일': 'date', '채널': 'channel'
+  };
+  var CSV_REQUIRED = ['year', 'season', 'styleCode', 'modelCode', 'quantity', 'unitPrice', 'date', 'channel'];
+
+  function processImportRows(rows) {
+    if (!rows || rows.length < 2) {
+      alert('가져올 데이터가 없습니다.');
+      return;
+    }
+    var header = rows[0].map(function (h) { return String(h == null ? '' : h).trim(); });
+    var colIndex = {};
+    header.forEach(function (h, i) { if (CSV_FIELD_MAP[h]) colIndex[CSV_FIELD_MAP[h]] = i; });
+
+    var missingRequired = CSV_REQUIRED.filter(function (key) { return !(key in colIndex); });
+    if (missingRequired.length) {
+      alert('파일 헤더에 필수 항목이 없습니다: ' + missingRequired.join(', '));
+      return;
+    }
+
+    function cell(cols, key) { return String(colIndex[key] != null && cols[colIndex[key]] != null ? cols[colIndex[key]] : '').trim(); }
+
+    var imported = 0, skipped = 0;
+    rows.slice(1).forEach(function (cols) {
+      var year = parseInt(cell(cols, 'year'), 10);
+      var season = cell(cols, 'season');
+      var styleCode = cell(cols, 'styleCode');
+      var modelCode = cell(cols, 'modelCode');
+      var productName = cell(cols, 'productName');
+      var quantity = parseFloat(cell(cols, 'quantity'));
+      var unitPrice = parseFloat(cell(cols, 'unitPrice'));
+      var unitCost = parseFloat(cell(cols, 'unitCost')) || 0;
+      var date = cell(cols, 'date');
+      var channel = cell(cols, 'channel');
+
+      var valid = year && (season === 'SS' || season === 'FW') && styleCode && modelCode &&
+        quantity > 0 && !isNaN(unitPrice) && unitPrice >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(date) && channel;
+
+      if (!valid) { skipped++; return; }
+
+      records.push({
+        id: uid(), year: year, season: season, styleCode: styleCode, modelCode: modelCode,
+        productName: productName, quantity: quantity, unitPrice: unitPrice, unitCost: unitCost,
+        date: date, channel: channel
+      });
+      imported++;
+    });
+
+    saveRecords(records);
+    renderRecords();
+    if (document.getElementById('panel-dashboard').classList.contains('active')) renderDashboard();
+    alert(imported + '건 가져옴' + (skipped ? ' (' + skipped + '건 건너뜀)' : ''));
+  }
+
+  document.getElementById('btnImportCsv').addEventListener('click', function () {
+    document.getElementById('fileImportCsv').click();
+  });
+  document.getElementById('fileImportCsv').addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    var reader = new FileReader();
+    reader.onload = function () {
+      var rows;
+      if (isExcel) {
+        var workbook = XLSX.read(new Uint8Array(reader.result), { type: 'array' });
+        var sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '', dateNF: 'yyyy-mm-dd' });
+      } else {
+        rows = parseCsvText(String(reader.result));
+      }
+      processImportRows(rows);
+      e.target.value = '';
+    };
+    if (isExcel) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file, 'utf-8');
+  });
+
+  // ---------- Compare ----------
+  function populateCompareModelCodes() {
+    var select = document.getElementById('cmpModelCode');
+    var current = select.value;
+    var codes = Array.from(new Set(records.map(function (r) { return r.modelCode; }))).sort();
+    select.innerHTML = '<option value="">전체</option>' + codes.map(function (c) {
+      return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+    }).join('');
+    if (codes.indexOf(current) !== -1) select.value = current;
+  }
+
+  function deltaCell(a, b) {
+    if (a === 0 && b === 0) return '<span class="delta-flat">–</span>';
+    if (a === 0) return '<span class="delta-up">▲ 신규</span>';
+    var pct = (b - a) / a * 100;
+    if (Math.abs(pct) < 0.05) return '<span class="delta-flat">– 0.0%</span>';
+    var cls = pct > 0 ? 'delta-up' : 'delta-down';
+    var arrow = pct > 0 ? '▲' : '▼';
+    return '<span class="' + cls + '">' + arrow + ' ' + Math.abs(pct).toFixed(1) + '%</span>';
+  }
+
+  function renderCompare() {
+    populateCompareModelCodes();
+
+    var from = document.getElementById('cmpFrom').value;
+    var to = document.getElementById('cmpTo').value;
+    var mode = document.getElementById('cmpMode').value;
+    var modelFilter = document.getElementById('cmpModelCode').value;
+
+    var isCustom = mode === 'custom';
+    document.getElementById('cmpCustomFromField').style.display = isCustom ? '' : 'none';
+    document.getElementById('cmpCustomToField').style.display = isCustom ? '' : 'none';
+
+    var readout = document.getElementById('cmpPeriodReadout');
+    var tbody = document.querySelector('#compareTable tbody');
+
+    if (!from || !to) {
+      readout.textContent = '기준 기간을 선택해주세요.';
+      tbody.innerHTML = '';
+      document.getElementById('compareEmpty').style.display = 'block';
+      document.getElementById('compareTable').style.display = 'none';
+      return;
+    }
+
+    var cmpFrom, cmpTo;
+    if (mode === 'week') {
+      cmpFrom = shiftDateStr(from, -7);
+      cmpTo = shiftDateStr(to, -7);
+    } else if (mode === 'year') {
+      cmpFrom = shiftYearStr(from, -1);
+      cmpTo = shiftYearStr(to, -1);
+    } else {
+      cmpFrom = document.getElementById('cmpCustomFrom').value;
+      cmpTo = document.getElementById('cmpCustomTo').value;
+    }
+
+    if (!cmpFrom || !cmpTo) {
+      readout.textContent = isCustom ? '비교 기간을 선택해주세요.' : '';
+      tbody.innerHTML = '';
+      document.getElementById('compareEmpty').style.display = 'block';
+      document.getElementById('compareTable').style.display = 'none';
+      return;
+    }
+
+    readout.textContent = '기준 기간: ' + from + ' ~ ' + to + '  ·  비교 기간: ' + cmpFrom + ' ~ ' + cmpTo;
+
+    var baseList = records.filter(function (r) { return inRange(r.date, from, to) && (!modelFilter || r.modelCode === modelFilter); });
+    var cmpList = records.filter(function (r) { return inRange(r.date, cmpFrom, cmpTo) && (!modelFilter || r.modelCode === modelFilter); });
+
+    var baseMap = aggregateByModelCode(baseList);
+    var cmpMap = aggregateByModelCode(cmpList);
+    var allCodes = Array.from(new Set(Object.keys(baseMap).concat(Object.keys(cmpMap))));
+
+    var rows = allCodes.map(function (code) {
+      var b = baseMap[code] || { qty: 0, revenue: 0 };
+      var c = cmpMap[code] || { qty: 0, revenue: 0 };
+      return { code: code, baseRevenue: b.revenue, baseQty: b.qty, cmpRevenue: c.revenue, cmpQty: c.qty };
+    }).sort(function (a, b) { return b.baseRevenue - a.baseRevenue; });
+
+    tbody.innerHTML = rows.map(function (r) {
+      return '<tr>' +
+        '<td>' + escapeHtml(r.code) + '</td>' +
+        '<td class="tabular">' + fmtWon(r.baseRevenue) + '</td>' +
+        '<td class="tabular">' + fmtInt(r.baseQty) + '</td>' +
+        '<td class="tabular">' + fmtWon(r.cmpRevenue) + '</td>' +
+        '<td class="tabular">' + fmtInt(r.cmpQty) + '</td>' +
+        '<td class="tabular">' + deltaCell(r.cmpRevenue, r.baseRevenue) + '</td>' +
+        '<td class="tabular">' + deltaCell(r.cmpQty, r.baseQty) + '</td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('compareEmpty').style.display = rows.length ? 'none' : 'block';
+    document.getElementById('compareTable').style.display = rows.length ? '' : 'none';
+  }
+
+  (function initCompareDefaults() {
+    var today = new Date();
+    var monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('cmpFrom').value = localDateStr(monthStart);
+    document.getElementById('cmpTo').value = localDateStr(today);
+  })();
+
+  ['cmpFrom', 'cmpTo', 'cmpMode', 'cmpCustomFrom', 'cmpCustomTo', 'cmpModelCode'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', renderCompare);
+    document.getElementById(id).addEventListener('change', renderCompare);
+  });
+
+  // ---------- init ----------
+  renderDashboard();
+  renderRecords();
+})();
+</script>
+</body>
+</html>
