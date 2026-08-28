@@ -151,6 +151,23 @@
   .bar-track { flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
   .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
 
+  .model-thumb-cell { display: flex; align-items: center; gap: 6px; }
+  .model-thumb {
+    width: 36px; height: 36px; border-radius: 6px; object-fit: cover;
+    border: 1px solid var(--border); cursor: pointer; display: block;
+  }
+  .model-thumb-placeholder {
+    width: 36px; height: 36px; border-radius: 6px; border: 1px dashed var(--border);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    color: var(--text-muted); font-size: 16px; background: var(--surface-2);
+  }
+  .model-thumb-placeholder:hover, .model-thumb:hover { filter: brightness(0.95); }
+  .model-thumb-remove {
+    font-size: 11px; color: var(--text-muted); cursor: pointer; background: none;
+    border: none; padding: 0; font-family: inherit;
+  }
+  .model-thumb-remove:hover { color: var(--danger); }
+
   .legend-row { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; }
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
   .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
@@ -273,18 +290,19 @@
     </div>
 
     <section class="dash-section">
-      <h2>모코드별 판매량 · 매출</h2>
+      <h2>판매랭킹</h2>
       <div class="card table-scroll">
         <table class="data-table" id="modelCodeTable">
           <thead>
             <tr>
-              <th>모코드</th><th>품번 수</th><th>판매수량</th><th>매출</th><th>순이익</th><th>비중</th>
+              <th>이미지</th><th>모코드</th><th>품번 수</th><th>판매수량</th><th>매출</th><th>순이익</th><th>비중</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
         <div class="empty-state" id="modelCodeEmpty" style="display:none;">아직 판매 기록이 없습니다.</div>
       </div>
+      <input type="file" id="fileModelImage" accept="image/*" class="visually-hidden">
     </section>
 
     <section class="dash-section">
@@ -484,6 +502,7 @@
 <script>
 (function () {
   var STORAGE_KEY = 'sales_records_v1';
+  var MODEL_IMAGE_KEY = 'sales_model_images_v1';
   var CHANNEL_COLORS = { '자사몰': 'var(--cat-1)', '오프라인': 'var(--cat-2)', '위탁': 'var(--cat-3)', '기타': 'var(--cat-4)' };
   var CHANNELS = ['자사몰', '오프라인', '위탁', '기타'];
 
@@ -497,6 +516,32 @@
   }
   function saveRecords(records) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  }
+  function loadModelImages() {
+    try {
+      var raw = localStorage.getItem(MODEL_IMAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) { return {}; }
+  }
+  function saveModelImages(map) {
+    localStorage.setItem(MODEL_IMAGE_KEY, JSON.stringify(map));
+  }
+  function resizeImageToDataUrl(file, maxSize, callback) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        var w = Math.max(1, Math.round(img.width * scale));
+        var h = Math.max(1, Math.round(img.height * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        callback(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
   }
   function uid() {
     return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -539,6 +584,22 @@
   }
 
   var records = loadRecords();
+  var modelImages = loadModelImages();
+  var pendingImageModelCode = null;
+
+  var fileModelImageInput = document.getElementById('fileModelImage');
+  fileModelImageInput.addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    var modelCode = pendingImageModelCode;
+    e.target.value = '';
+    pendingImageModelCode = null;
+    if (!file || !modelCode) return;
+    resizeImageToDataUrl(file, 160, function (dataUrl) {
+      modelImages[modelCode] = dataUrl;
+      saveModelImages(modelImages);
+      renderDashboard();
+    });
+  });
 
   // ---------- Tabs ----------
   document.querySelectorAll('.tab-btn').forEach(function (btn) {
@@ -596,7 +657,12 @@
     modelTbody.innerHTML = modelRows.map(function (r) {
       var pct = totalRevenue > 0 ? (r.revenue / totalRevenue * 100) : 0;
       var barPct = (r.revenue / maxModelRevenue * 100).toFixed(1);
+      var img = modelImages[r.code];
+      var imgCell = img
+        ? '<div class="model-thumb-cell"><img class="model-thumb" src="' + img + '" data-model-thumb="' + escapeHtml(r.code) + '" title="클릭하여 이미지 변경"><button type="button" class="model-thumb-remove" data-model-thumb-remove="' + escapeHtml(r.code) + '">삭제</button></div>'
+        : '<div class="model-thumb-placeholder" data-model-thumb="' + escapeHtml(r.code) + '" title="이미지 등록">＋</div>';
       return '<tr>' +
+        '<td>' + imgCell + '</td>' +
         '<td>' + escapeHtml(r.code) + '</td>' +
         '<td class="tabular">' + r.styleCount + '</td>' +
         '<td class="tabular">' + fmtInt(r.qty) + '</td>' +
@@ -607,6 +673,21 @@
     }).join('');
     document.getElementById('modelCodeEmpty').style.display = modelRows.length ? 'none' : 'block';
     document.getElementById('modelCodeTable').style.display = modelRows.length ? '' : 'none';
+
+    modelTbody.querySelectorAll('[data-model-thumb]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        pendingImageModelCode = el.getAttribute('data-model-thumb');
+        fileModelImageInput.click();
+      });
+    });
+    modelTbody.querySelectorAll('[data-model-thumb-remove]').forEach(function (el) {
+      el.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        delete modelImages[el.getAttribute('data-model-thumb-remove')];
+        saveModelImages(modelImages);
+        renderDashboard();
+      });
+    });
 
     // monthly table
     var monthRows = Object.keys(monthMap).sort().reverse().map(function (k) {
