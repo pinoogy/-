@@ -551,13 +551,26 @@
   function aggregateByModelCode(list) {
     var map = {};
     list.forEach(function (r) {
-      if (!map[r.modelCode]) map[r.modelCode] = { styleCodes: new Set(), qty: 0, revenue: 0, profit: 0 };
+      if (!map[r.modelCode]) map[r.modelCode] = { styleCodes: new Set(), productNames: new Set(), qty: 0, revenue: 0, profit: 0 };
       map[r.modelCode].styleCodes.add(r.styleCode);
+      if (r.productName) map[r.modelCode].productNames.add(r.productName.trim());
       map[r.modelCode].qty += r.quantity;
       map[r.modelCode].revenue += revenueOf(r);
       map[r.modelCode].profit += profitOf(r);
     });
     return map;
+  }
+  var IMAGE_FOLDER = '../이미지/';
+  var IMAGE_EXTS = ['png', 'PNG', 'jpg', 'JPG', 'jpeg', 'JPEG'];
+  function buildImageCandidates(names) {
+    var out = [];
+    (names || []).forEach(function (name) {
+      if (!name) return;
+      IMAGE_EXTS.forEach(function (ext) {
+        out.push(IMAGE_FOLDER + encodeURIComponent(name) + '.' + ext);
+      });
+    });
+    return out;
   }
   function shiftDateStr(dateStr, days) {
     var d = new Date(dateStr + 'T00:00:00');
@@ -600,6 +613,41 @@
       renderDashboard();
     });
   });
+
+  var modelTbodyEl = document.querySelector('#modelCodeTable tbody');
+  modelTbodyEl.addEventListener('click', function (e) {
+    var removeBtn = e.target.closest('[data-model-thumb-remove]');
+    if (removeBtn) {
+      e.stopPropagation();
+      delete modelImages[removeBtn.getAttribute('data-model-thumb-remove')];
+      saveModelImages(modelImages);
+      renderDashboard();
+      return;
+    }
+    var thumbEl = e.target.closest('[data-model-thumb]');
+    if (thumbEl) {
+      pendingImageModelCode = thumbEl.getAttribute('data-model-thumb');
+      fileModelImageInput.click();
+    }
+  });
+  // capture phase: <img> "error" events don't bubble, so listen on the way down
+  modelTbodyEl.addEventListener('error', function (e) {
+    var el = e.target;
+    if (!el || el.tagName !== 'IMG' || !el.hasAttribute('data-candidates')) return;
+    var candidates = JSON.parse(el.getAttribute('data-candidates'));
+    var idx = parseInt(el.getAttribute('data-idx'), 10) + 1;
+    if (idx < candidates.length) {
+      el.setAttribute('data-idx', idx);
+      el.src = candidates[idx];
+    } else {
+      var placeholder = document.createElement('div');
+      placeholder.className = 'model-thumb-placeholder';
+      placeholder.setAttribute('data-model-thumb', el.getAttribute('data-model-thumb'));
+      placeholder.title = '이미지 등록';
+      placeholder.textContent = '＋';
+      el.replaceWith(placeholder);
+    }
+  }, true);
 
   // ---------- Tabs ----------
   document.querySelectorAll('.tab-btn').forEach(function (btn) {
@@ -649,7 +697,7 @@
     // model code table
     var modelMap = aggregateByModelCode(records);
     var modelRows = Object.keys(modelMap).map(function (code) {
-      return { code: code, styleCount: modelMap[code].styleCodes.size, qty: modelMap[code].qty, revenue: modelMap[code].revenue, profit: modelMap[code].profit };
+      return { code: code, styleCount: modelMap[code].styleCodes.size, qty: modelMap[code].qty, revenue: modelMap[code].revenue, profit: modelMap[code].profit, productNames: Array.from(modelMap[code].productNames) };
     }).sort(function (a, b) { return b.revenue - a.revenue; });
     var maxModelRevenue = modelRows.reduce(function (m, r) { return Math.max(m, r.revenue); }, 0) || 1;
 
@@ -658,9 +706,15 @@
       var pct = totalRevenue > 0 ? (r.revenue / totalRevenue * 100) : 0;
       var barPct = (r.revenue / maxModelRevenue * 100).toFixed(1);
       var img = modelImages[r.code];
-      var imgCell = img
-        ? '<div class="model-thumb-cell"><img class="model-thumb" src="' + img + '" data-model-thumb="' + escapeHtml(r.code) + '" title="클릭하여 이미지 변경"><button type="button" class="model-thumb-remove" data-model-thumb-remove="' + escapeHtml(r.code) + '">삭제</button></div>'
-        : '<div class="model-thumb-placeholder" data-model-thumb="' + escapeHtml(r.code) + '" title="이미지 등록">＋</div>';
+      var imgCell;
+      if (img) {
+        imgCell = '<div class="model-thumb-cell"><img class="model-thumb" src="' + img + '" data-model-thumb="' + escapeHtml(r.code) + '" title="클릭하여 이미지 변경"><button type="button" class="model-thumb-remove" data-model-thumb-remove="' + escapeHtml(r.code) + '">삭제</button></div>';
+      } else {
+        var candidates = buildImageCandidates(r.productNames);
+        imgCell = candidates.length
+          ? '<div class="model-thumb-cell"><img class="model-thumb" src="' + escapeHtml(candidates[0]) + '" data-model-thumb="' + escapeHtml(r.code) + '" data-candidates="' + escapeHtml(JSON.stringify(candidates)) + '" data-idx="0" title="클릭하여 이미지 변경"></div>'
+          : '<div class="model-thumb-placeholder" data-model-thumb="' + escapeHtml(r.code) + '" title="이미지 등록">＋</div>';
+      }
       return '<tr>' +
         '<td>' + imgCell + '</td>' +
         '<td>' + escapeHtml(r.code) + '</td>' +
@@ -673,21 +727,6 @@
     }).join('');
     document.getElementById('modelCodeEmpty').style.display = modelRows.length ? 'none' : 'block';
     document.getElementById('modelCodeTable').style.display = modelRows.length ? '' : 'none';
-
-    modelTbody.querySelectorAll('[data-model-thumb]').forEach(function (el) {
-      el.addEventListener('click', function () {
-        pendingImageModelCode = el.getAttribute('data-model-thumb');
-        fileModelImageInput.click();
-      });
-    });
-    modelTbody.querySelectorAll('[data-model-thumb-remove]').forEach(function (el) {
-      el.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        delete modelImages[el.getAttribute('data-model-thumb-remove')];
-        saveModelImages(modelImages);
-        renderDashboard();
-      });
-    });
 
     // monthly table
     var monthRows = Object.keys(monthMap).sort().reverse().map(function (k) {
